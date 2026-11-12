@@ -378,9 +378,17 @@ document.addEventListener('contextmenu', (e) => {
 });
 
 // ATEŞ ETME - Sabit namlu, tank yönünde
+let lastShootTime = 0;
+const shootCooldown = 500; // 0.5 saniye
+
 function shootBullet() {
     const tank = gameState.myTank;
     if (!tank) return;
+    
+    // Cooldown kontrolü
+    const now = Date.now();
+    if (now - lastShootTime < shootCooldown) return;
+    lastShootTime = now;
     
     // Tank rotasyonu = ateş yönü
     const direction = new THREE.Vector3(
@@ -389,7 +397,7 @@ function shootBullet() {
         Math.cos(tank.rotation.y)
     );
     
-    const bulletSpeed = 1.2; // Daha yavaş
+    const bulletSpeed = 1.5; // Daha hızlı
     const spawnOffset = 4.5;
     
     const bulletData = {
@@ -403,11 +411,44 @@ function shootBullet() {
     
     socket.emit('shootBullet', bulletData);
     
-    // Geri tepme
+    // Geri tepme efekti
     tank.barrel.position.z = 2.5;
     setTimeout(() => { tank.barrel.position.z = 2.8; }, 100);
     
+    // Muzzle flash efekti
+    createMuzzleFlash(tank);
+    
     playShootSound();
+}
+
+// Namlu ateş efekti
+function createMuzzleFlash(tank) {
+    const direction = new THREE.Vector3(
+        Math.sin(tank.rotation.y),
+        0,
+        Math.cos(tank.rotation.y)
+    );
+    
+    const flashGeometry = new THREE.SphereGeometry(0.5, 8, 8);
+    const flashMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0xffaa00,
+        transparent: true,
+        opacity: 1
+    });
+    const flash = new THREE.Mesh(flashGeometry, flashMaterial);
+    
+    flash.position.set(
+        tank.position.x + direction.x * 4,
+        tank.position.y + 2.5,
+        tank.position.z + direction.z * 4
+    );
+    
+    scene.add(flash);
+    
+    // Hızlıca kaybol
+    setTimeout(() => {
+        scene.remove(flash);
+    }, 100);
 }
 
 function playShootSound() {
@@ -428,31 +469,42 @@ function playShootSound() {
     oscillator.stop(audioContext.currentTime + 0.1);
 }
 
-// Mermi oluşturma
+// Mermi oluşturma - DAHA BÜYÜK
 function createBullet() {
-    const geometry = new THREE.SphereGeometry(0.25, 12, 12);
+    const geometry = new THREE.SphereGeometry(0.3, 12, 12);
     const material = new THREE.MeshStandardMaterial({ 
         color: 0xffff00,
         emissive: 0xffaa00,
-        emissiveIntensity: 0.8,
+        emissiveIntensity: 1,
         metalness: 0.5
     });
     const bullet = new THREE.Mesh(geometry, material);
     bullet.castShadow = true;
     
-    const light = new THREE.PointLight(0xffaa00, 1, 10);
+    const light = new THREE.PointLight(0xffaa00, 2, 15);
     bullet.add(light);
+    
+    // İz efekti
+    const trailGeometry = new THREE.SphereGeometry(0.15, 8, 8);
+    const trailMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0xff6600,
+        transparent: true,
+        opacity: 0.6
+    });
+    const trail = new THREE.Mesh(trailGeometry, trailMaterial);
+    trail.position.z = -0.5;
+    bullet.add(trail);
     
     return bullet;
 }
 
-// Patlama efekti
+// Patlama efekti - DAHA GÜZELLEŞTİRİLDİ
 function createExplosion(position) {
-    const particleCount = 30;
+    const particleCount = 40; // Daha fazla partikül
     const particles = [];
     
     for (let i = 0; i < particleCount; i++) {
-        const geometry = new THREE.SphereGeometry(0.1 + Math.random() * 0.2, 4, 4);
+        const geometry = new THREE.SphereGeometry(0.1 + Math.random() * 0.25, 4, 4);
         const material = new THREE.MeshBasicMaterial({ 
             color: Math.random() > 0.5 ? 0xff6600 : 0xffaa00
         });
@@ -460,9 +512,9 @@ function createExplosion(position) {
         
         particle.position.copy(position);
         particle.velocity = new THREE.Vector3(
-            (Math.random() - 0.5) * 0.3,
-            Math.random() * 0.4,
-            (Math.random() - 0.5) * 0.3
+            (Math.random() - 0.5) * 0.4,
+            Math.random() * 0.5,
+            (Math.random() - 0.5) * 0.4
         );
         particle.life = 1.0;
         
@@ -470,14 +522,38 @@ function createExplosion(position) {
         particles.push(particle);
     }
     
-    const light = new THREE.PointLight(0xff6600, 5, 20);
+    // Duman efekti
+    for (let i = 0; i < 10; i++) {
+        const smokeGeometry = new THREE.SphereGeometry(0.5, 8, 8);
+        const smokeMaterial = new THREE.MeshBasicMaterial({ 
+            color: 0x333333,
+            transparent: true,
+            opacity: 0.6
+        });
+        const smoke = new THREE.Mesh(smokeGeometry, smokeMaterial);
+        
+        smoke.position.copy(position);
+        smoke.position.y += Math.random() * 0.5;
+        smoke.velocity = new THREE.Vector3(
+            (Math.random() - 0.5) * 0.1,
+            Math.random() * 0.2 + 0.1,
+            (Math.random() - 0.5) * 0.1
+        );
+        
+        scene.add(smoke);
+        particles.push(smoke);
+    }
+    
+    // Işık efekti
+    const light = new THREE.PointLight(0xff6600, 8, 25);
     light.position.copy(position);
     scene.add(light);
     
+    // Animasyon
     const startTime = Date.now();
     const animate = () => {
         const elapsed = (Date.now() - startTime) / 1000;
-        if (elapsed > 1) {
+        if (elapsed > 1.5) {
             particles.forEach(p => scene.remove(p));
             scene.remove(light);
             return;
@@ -485,16 +561,20 @@ function createExplosion(position) {
         
         particles.forEach(p => {
             p.position.add(p.velocity);
-            p.velocity.y -= 0.02;
-            p.scale.setScalar(1 - elapsed);
+            p.velocity.y -= 0.02; // Yerçekimi
+            p.scale.setScalar(1 - elapsed * 0.7);
+            if (p.material.opacity) {
+                p.material.opacity = 0.6 * (1 - elapsed / 1.5);
+            }
         });
         
-        light.intensity = 5 * (1 - elapsed);
+        light.intensity = 8 * (1 - elapsed / 1.5);
         
         requestAnimationFrame(animate);
     };
     animate();
     
+    // Ses efekti
     playExplosionSound();
 }
 
@@ -604,6 +684,9 @@ socket.on('playerDamaged', (data) => {
         gameState.myHealth = data.health;
         updateHealthBar();
         
+        // Hasar efekti - ekranı kırmızıya boya
+        createDamageEffect();
+        
         if (data.health <= 0) {
             gameState.isDead = true;
             document.getElementById('respawn-msg').style.display = 'block';
@@ -677,6 +760,26 @@ function showKillNotification() {
     }, 2000);
 }
 
+// Hasar aldığında ekran efekti
+function createDamageEffect() {
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.top = '0';
+    overlay.style.left = '0';
+    overlay.style.width = '100vw';
+    overlay.style.height = '100vh';
+    overlay.style.background = 'rgba(255, 0, 0, 0.4)';
+    overlay.style.pointerEvents = 'none';
+    overlay.style.zIndex = '1000';
+    overlay.style.transition = 'opacity 0.3s';
+    document.body.appendChild(overlay);
+    
+    setTimeout(() => {
+        overlay.style.opacity = '0';
+        setTimeout(() => document.body.removeChild(overlay), 300);
+    }, 200);
+}
+
 // OYUN DÖNGÜSÜ
 let lastUpdate = Date.now();
 
@@ -693,8 +796,8 @@ function animate() {
     
     if (gameState.myTank && !gameState.isDead) {
         // Hareket - DAHA YAVAŞ
-        const speed = 0.15;
-        const rotationSpeed = 0.025;
+        const speed = 0.18; // Biraz daha hızlı
+        const rotationSpeed = 0.03; // Daha hızlı dönüş
         
         let moved = false;
         const oldPos = gameState.myTank.position.clone();
@@ -792,15 +895,17 @@ function animate() {
     
     // Mermileri güncelle
     Object.entries(gameState.bullets).forEach(([id, bullet]) => {
+        if (!bullet || !bullet.mesh) return;
+        
         bullet.mesh.position.add(bullet.mesh.velocity);
         
         let hitSomething = false;
         
-        // Oyuncu çarpışması
+        // Oyuncu çarpışması - DAHA İYİ ALGILAMA
         Object.entries(gameState.players).forEach(([playerId, player]) => {
-            if (bullet.data.playerId !== playerId && !hitSomething) {
+            if (bullet.data.playerId !== playerId && !hitSomething && player.tank) {
                 const distance = bullet.mesh.position.distanceTo(player.tank.position);
-                if (distance < 2.5) {
+                if (distance < 3.5) { // Daha geniş çarpışma alanı
                     createExplosion(bullet.mesh.position.clone());
                     scene.remove(bullet.mesh);
                     delete gameState.bullets[id];
@@ -811,6 +916,8 @@ function animate() {
                         hitPlayerId: playerId,
                         shooterId: bullet.data.playerId
                     });
+                    
+                    console.log('HIT! Shooter:', bullet.data.playerId, 'Target:', playerId);
                 }
             }
         });
@@ -838,7 +945,7 @@ function animate() {
             });
         }
         
-        // Zemin kontrolü
+        // Zemin/sınır kontrolü
         if (!hitSomething && (bullet.mesh.position.y < 0 || 
             Math.abs(bullet.mesh.position.x) > 100 || 
             Math.abs(bullet.mesh.position.z) > 100)) {
