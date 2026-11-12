@@ -966,6 +966,8 @@ function updateWeaponDisplay() {
     document.getElementById('rapidAmmo').textContent = gameState.ammo.rapid;
     document.getElementById('missileAmmo').textContent = gameState.ammo.missile;
 }
+
+function showKillNotification() {
     const notification = document.getElementById('kill-notification');
     notification.textContent = '💀 KILL! +1';
     notification.style.display = 'block';
