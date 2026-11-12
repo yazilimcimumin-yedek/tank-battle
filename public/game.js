@@ -381,14 +381,24 @@ document.addEventListener('keyup', (e) => {
 document.addEventListener('mousemove', (e) => {
     mouse.x = e.clientX;
     mouse.y = e.clientY;
+    mouse.movementX = e.movementX || 0;
+    mouse.movementY = e.movementY || 0;
 });
 
-// Tıklama - sadece ateş
+// Sağ tık - kamera döndürme
 document.addEventListener('mousedown', (e) => {
-    if (e.button === 0) {
+    if (e.button === 2) { // Sağ tık
+        mouse.rightButton = true;
+    } else if (e.button === 0) { // Sol tık - ateş
         if (!gameState.isDead && gameState.myTank && gameState.gameStarted) {
             shootBullet();
         }
+    }
+});
+
+document.addEventListener('mouseup', (e) => {
+    if (e.button === 2) {
+        mouse.rightButton = false;
     }
 });
 
