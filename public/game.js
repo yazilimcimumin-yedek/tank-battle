@@ -1094,15 +1094,15 @@ function animate() {
         gameState.myTank.position.x = Math.max(-95, Math.min(95, gameState.myTank.position.x));
         gameState.myTank.position.z = Math.max(-95, Math.min(95, gameState.myTank.position.z));
         
-        // Kamera - tankın arkasından + sağ tık ile serbestçe bak
+        // Kamera - sağ tıkla etrafa bak
+        if (mouse.rightButton) {
+            cameraAngle += mouse.movementX * 0.005;
+        }
+        
         const camDist = 15;
         const camHeight = 8;
-        
-        // Tank rotasyonu + fare ile eklenen açı
-        const totalCameraAngle = gameState.myTank.rotation.y + cameraAngleOffset;
-        
-        const camX = Math.sin(totalCameraAngle) * camDist;
-        const camZ = Math.cos(totalCameraAngle) * camDist;
+        const camX = Math.sin(gameState.myTank.rotation.y + cameraAngle) * camDist;
+        const camZ = Math.cos(gameState.myTank.rotation.y + cameraAngle) * camDist;
         
         const targetCamPos = new THREE.Vector3(
             gameState.myTank.position.x - camX,
