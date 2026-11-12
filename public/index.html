@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Tank Battle - Multiplayer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        }
+
+        #loginScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+
+        #loginBox {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 40px;
+            border-radius: 20px;
+            border: 3px solid #4CAF50;
+            box-shadow: 0 0 30px rgba(76, 175, 80, 0.5);
+            text-align: center;
+            min-width: 400px;
+        }
+
+        #loginBox h1 {
+            color: #4CAF50;
+            margin-bottom: 10px;
+            font-size: 36px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+
+        #loginBox p {
+            color: #ccc;
+            margin-bottom: 30px;
+            font-size: 18px;
+        }
+
+        #playerName {
+            width: 100%;
+            padding: 15px;
+            font-size: 18px;
+            border: 2px solid #4CAF50;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            margin-bottom: 20px;
+            text-align: center;
+            outline: none;
+        }
+
+        #playerName::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        #playerName:focus {
+            border-color: #66ff66;
+            box-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
+        }
+
+        #joinButton {
+            width: 100%;
+            padding: 15px;
+            font-size: 20px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        #joinButton:hover {
+            background: linear-gradient(135deg, #45a049 0%, #4CAF50 100%);
+            box-shadow: 0 0 20px rgba(76, 175, 80, 0.8);
+            transform: scale(1.05);
+        }
+
+        #joinButton:active {
+            transform: scale(0.98);
+        }
+
+        #instructions {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        #instructions h3 {
+            color: #4CAF50;
+            margin-bottom: 10px;
+        }
+
+        #instructions p {
+            color: #aaa;
+            margin: 5px 0;
+            font-size: 14px;
+        }
+
+        #gameCanvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-size: 18px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            pointer-events: none;
+        }
+
+        #health-bar {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 300px;
+            height: 30px;
+            background: rgba(0,0,0,0.5);
+            border: 3px solid #fff;
+            border-radius: 15px;
+            overflow: hidden;
+        }
+
+        #health-fill {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, #ff0000 0%, #00ff00 100%);
+            transition: width 0.3s ease;
+        }
+
+        #health-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+
+        #scoreboard {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 10px;
+            color: white;
+            min-width: 200px;
+        }
+
+        #scoreboard h3 {
+            margin-bottom: 10px;
+            border-bottom: 2px solid #fff;
+            padding-bottom: 5px;
+        }
+
+        .player-score {
+            padding: 5px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 10px;
+            color: white;
+            font-size: 14px;
+        }
+
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40px;
+            height: 40px;
+            pointer-events: none;
+        }
+
+        #crosshair::before,
+        #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 0, 0, 0.8);
+        }
+
+        #crosshair::before {
+            top: 50%;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            transform: translateY(-50%);
+        }
+
+        #crosshair::after {
+            left: 50%;
+            top: 0;
+            width: 2px;
+            height: 100%;
+            transform: translateX(-50%);
+        }
+
+        #respawn-msg {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ff0000;
+            font-size: 48px;
+            font-weight: bold;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.9);
+            display: none;
+        }
+
+        #kill-notification {
+            position: absolute;
+            top: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 0, 0, 0.9);
+            color: white;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 24px;
+            font-weight: bold;
+            display: none;
+            animation: slideDown 0.5s ease;
+        }
+
+        #respawn-msg {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ff0000;
+            font-size: 48px;
+            font-weight: bold;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.9);
+            display: none;
+        }
+
+        #kill-notification {
+            position: absolute;
+            top: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 0, 0, 0.9);
+            color: white;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 24px;
+            font-weight: bold;
+            display: none;
+            animation: slideDown 0.5s ease;
+        }
+
+        @keyframes slideDown {
+            from {
+                top: -100px;
+                opacity: 0;
+            }
+            to {
+                top: 100px;
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- GİRİŞ EKRANI -->
+    <div id="loginScreen">
+        <div id="loginBox">
+            <h1>🎮 3D TANK SAVAŞI 🎮</h1>
+            <p>Aynı ağdaki oyuncularla savaş!</p>
+            <input type="text" id="playerName" placeholder="İsmini gir..." maxlength="15" autofocus>
+            <button id="joinButton">OYUNA KATIL</button>
+            <div id="instructions">
+                <h3>Kontroller:</h3>
+                <p>W/S - İleri/Geri</p>
+                <p>A/D - Dönüş</p>
+                <p>Space/Sol Tık - Ateş</p>
+            </div>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas" style="display: none;"></canvas>
+    
+    <div id="ui" style="display: none;">
+        <div id="hud">
+            <div>Oyuncular: <span id="playerCount">1</span></div>
+            <div>Skor: <span id="score">0</span></div>
+        </div>
+
+        <div id="health-bar">
+            <div id="health-fill"></div>
+            <div id="health-text">100 HP</div>
+        </div>
+
+        <div id="scoreboard">
+            <h3>🏆 Skor Tablosu</h3>
+            <div id="scoreList"></div>
+        </div>
+
+        <div id="controls">
+            <strong>Kontroller:</strong><br>
+            W/A/S/D - Hareket & Dönüş<br>
+            Sol Tık / Space - Ateş<br>
+            (Namlu tankla birlikte döner)
+        </div>
+
+        <div id="crosshair"></div>
+        <div id="respawn-msg">ÖLDün! Yeniden Doğuyorsun...</div>
+        <div id="kill-notification"></div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
