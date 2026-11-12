@@ -90,7 +90,8 @@ io.on('connection', (socket) => {
     // Hasar alma
     socket.on('playerHit', (data) => {
         if (players[data.hitPlayerId]) {
-            players[data.hitPlayerId].health -= 25;
+            const damage = data.damage || 25;
+            players[data.hitPlayerId].health -= damage;
             
             if (players[data.hitPlayerId].health <= 0) {
                 players[data.hitPlayerId].health = 0;

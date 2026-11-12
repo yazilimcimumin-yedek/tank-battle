@@ -286,24 +286,35 @@ function createTank(color) {
 const gameState = {
     players: {},
     bullets: {},
+    powerups: {},
     myId: null,
     myTank: null,
     myHealth: 100,
     myScore: 0,
     isDead: false,
-    gameStarted: false
+    gameStarted: false,
+    currentWeapon: 'normal', // normal, rocket, rapid, missile
+    ammo: {
+        rocket: 5,
+        rapid: 50,
+        missile: 3
+    }
 };
 
 // GİRİŞ EKRANI
-document.getElementById('joinButton').addEventListener('click', startGame);
-document.getElementById('playerName').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        startGame();
-    }
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('joinButton').addEventListener('click', startGame);
+    document.getElementById('playerName').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            startGame();
+        }
+    });
 });
 
 // Oyun başlatma
 function startGame() {
+    if (gameState.gameStarted) return; // Zaten başladıysa çıkış yap
+    
     const nameInput = document.getElementById('playerName');
     const name = nameInput.value.trim();
     
@@ -352,6 +363,14 @@ document.addEventListener('keydown', (e) => {
         e.preventDefault();
         shootBullet();
     }
+    
+    // Silah değiştirme
+    if (e.key === '1') gameState.currentWeapon = 'normal';
+    if (e.key === '2' && gameState.ammo.rocket > 0) gameState.currentWeapon = 'rocket';
+    if (e.key === '3' && gameState.ammo.rapid > 0) gameState.currentWeapon = 'rapid';
+    if (e.key === '4' && gameState.ammo.missile > 0) gameState.currentWeapon = 'missile';
+    
+    updateWeaponDisplay();
 });
 
 document.addEventListener('keyup', (e) => { 
@@ -377,27 +396,65 @@ document.addEventListener('contextmenu', (e) => {
     e.preventDefault();
 });
 
-// ATEŞ ETME - Sabit namlu, tank yönünde
+// ATEŞ ETME - Çoklu silah sistemi
 let lastShootTime = 0;
-const shootCooldown = 500; // 0.5 saniye
 
 function shootBullet() {
     const tank = gameState.myTank;
     if (!tank) return;
     
-    // Cooldown kontrolü
     const now = Date.now();
-    if (now - lastShootTime < shootCooldown) return;
+    let cooldown = 500;
+    
+    // Silaha göre cooldown
+    if (gameState.currentWeapon === 'rapid') cooldown = 150;
+    if (gameState.currentWeapon === 'rocket') cooldown = 1000;
+    if (gameState.currentWeapon === 'missile') cooldown = 2000;
+    
+    if (now - lastShootTime < cooldown) return;
     lastShootTime = now;
     
-    // Tank rotasyonu = ateş yönü
+    // Mühimmat kontrolü
+    if (gameState.currentWeapon !== 'normal') {
+        if (gameState.ammo[gameState.currentWeapon] <= 0) {
+            gameState.currentWeapon = 'normal';
+            updateWeaponDisplay();
+            return;
+        }
+        gameState.ammo[gameState.currentWeapon]--;
+        updateWeaponDisplay();
+    }
+    
     const direction = new THREE.Vector3(
         Math.sin(tank.rotation.y),
         0,
         Math.cos(tank.rotation.y)
     );
     
-    const bulletSpeed = 1.5; // Daha hızlı
+    let bulletSpeed = 1.5;
+    let bulletSize = 0.3;
+    let damage = 25;
+    let bulletType = gameState.currentWeapon;
+    
+    // Silaha göre özellikler
+    switch (gameState.currentWeapon) {
+        case 'rocket':
+            bulletSpeed = 1.2;
+            bulletSize = 0.6;
+            damage = 50;
+            break;
+        case 'rapid':
+            bulletSpeed = 2.0;
+            bulletSize = 0.2;
+            damage = 15;
+            break;
+        case 'missile':
+            bulletSpeed = 1.0;
+            bulletSize = 0.5;
+            damage = 75;
+            break;
+    }
+    
     const spawnOffset = 4.5;
     
     const bulletData = {
@@ -406,7 +463,11 @@ function shootBullet() {
         z: tank.position.z + direction.z * spawnOffset,
         velocityX: direction.x * bulletSpeed,
         velocityY: 0,
-        velocityZ: direction.z * bulletSpeed
+        velocityZ: direction.z * bulletSpeed,
+        type: bulletType,
+        size: bulletSize,
+        damage: damage,
+        shooterId: gameState.myId
     };
     
     socket.emit('shootBullet', bulletData);
@@ -415,23 +476,37 @@ function shootBullet() {
     tank.barrel.position.z = 2.5;
     setTimeout(() => { tank.barrel.position.z = 2.8; }, 100);
     
-    // Muzzle flash efekti
-    createMuzzleFlash(tank);
+    // Muzzle flash
+    createMuzzleFlash(tank, gameState.currentWeapon);
     
-    playShootSound();
+    playShootSound(gameState.currentWeapon);
 }
 
-// Namlu ateş efekti
-function createMuzzleFlash(tank) {
+// Namlu ateş efekti - Silaha göre
+function createMuzzleFlash(tank, weaponType) {
     const direction = new THREE.Vector3(
         Math.sin(tank.rotation.y),
         0,
         Math.cos(tank.rotation.y)
     );
     
-    const flashGeometry = new THREE.SphereGeometry(0.5, 8, 8);
+    let size = 0.5;
+    let color = 0xffaa00;
+    
+    if (weaponType === 'rocket') {
+        size = 1.0;
+        color = 0xff6600;
+    } else if (weaponType === 'rapid') {
+        size = 0.3;
+        color = 0xffff00;
+    } else if (weaponType === 'missile') {
+        size = 0.8;
+        color = 0xff0000;
+    }
+    
+    const flashGeometry = new THREE.SphereGeometry(size, 8, 8);
     const flashMaterial = new THREE.MeshBasicMaterial({ 
-        color: 0xffaa00,
+        color: color,
         transparent: true,
         opacity: 1
     });
@@ -445,13 +520,12 @@ function createMuzzleFlash(tank) {
     
     scene.add(flash);
     
-    // Hızlıca kaybol
     setTimeout(() => {
         scene.remove(flash);
     }, 100);
 }
 
-function playShootSound() {
+function playShootSound(weaponType) {
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
     const oscillator = audioContext.createOscillator();
     const gainNode = audioContext.createGain();
@@ -459,8 +533,22 @@ function playShootSound() {
     oscillator.connect(gainNode);
     gainNode.connect(audioContext.destination);
     
-    oscillator.frequency.value = 100;
-    oscillator.type = 'square';
+    let freq = 100;
+    let type = 'square';
+    
+    if (weaponType === 'rocket') {
+        freq = 80;
+        type = 'sawtooth';
+    } else if (weaponType === 'rapid') {
+        freq = 200;
+        type = 'sine';
+    } else if (weaponType === 'missile') {
+        freq = 60;
+        type = 'triangle';
+    }
+    
+    oscillator.frequency.value = freq;
+    oscillator.type = type;
     
     gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
     gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
@@ -469,42 +557,114 @@ function playShootSound() {
     oscillator.stop(audioContext.currentTime + 0.1);
 }
 
-// Mermi oluşturma - DAHA BÜYÜK
-function createBullet() {
-    const geometry = new THREE.SphereGeometry(0.3, 12, 12);
-    const material = new THREE.MeshStandardMaterial({ 
-        color: 0xffff00,
-        emissive: 0xffaa00,
-        emissiveIntensity: 1,
-        metalness: 0.5
-    });
+// Mermi oluşturma - Silah tipine göre
+function createBullet(bulletData) {
+    let geometry, material, color, size;
+    
+    switch (bulletData.type) {
+        case 'rocket':
+            size = bulletData.size || 0.6;
+            geometry = new THREE.CylinderGeometry(size * 0.5, size * 0.7, size * 2, 8);
+            material = new THREE.MeshStandardMaterial({ 
+                color: 0xff6600,
+                emissive: 0xff3300,
+                emissiveIntensity: 1.5,
+                metalness: 0.8
+            });
+            break;
+        case 'rapid':
+            size = bulletData.size || 0.2;
+            geometry = new THREE.SphereGeometry(size, 8, 8);
+            material = new THREE.MeshStandardMaterial({ 
+                color: 0xffff00,
+                emissive: 0xffaa00,
+                emissiveIntensity: 1
+            });
+            break;
+        case 'missile':
+            size = bulletData.size || 0.5;
+            geometry = new THREE.ConeGeometry(size * 0.8, size * 3, 8);
+            material = new THREE.MeshStandardMaterial({ 
+                color: 0xff0000,
+                emissive: 0xff0000,
+                emissiveIntensity: 2,
+                metalness: 0.9
+            });
+            break;
+        default: // normal
+            size = bulletData.size || 0.3;
+            geometry = new THREE.SphereGeometry(size, 12, 12);
+            material = new THREE.MeshStandardMaterial({ 
+                color: 0xffff00,
+                emissive: 0xffaa00,
+                emissiveIntensity: 1,
+                metalness: 0.5
+            });
+    }
+    
     const bullet = new THREE.Mesh(geometry, material);
     bullet.castShadow = true;
     
-    const light = new THREE.PointLight(0xffaa00, 2, 15);
+    // Işık efekti
+    const lightColor = bulletData.type === 'rocket' ? 0xff6600 : 
+                       bulletData.type === 'missile' ? 0xff0000 : 0xffaa00;
+    const light = new THREE.PointLight(lightColor, 3, 20);
     bullet.add(light);
     
-    // İz efekti
-    const trailGeometry = new THREE.SphereGeometry(0.15, 8, 8);
-    const trailMaterial = new THREE.MeshBasicMaterial({ 
-        color: 0xff6600,
-        transparent: true,
-        opacity: 0.6
-    });
-    const trail = new THREE.Mesh(trailGeometry, trailMaterial);
-    trail.position.z = -0.5;
-    bullet.add(trail);
+    // İz efekti - büyük mermiler için
+    if (bulletData.type === 'rocket' || bulletData.type === 'missile') {
+        const trailGeometry = new THREE.SphereGeometry(size * 0.5, 8, 8);
+        const trailMaterial = new THREE.MeshBasicMaterial({ 
+            color: 0xff6600,
+            transparent: true,
+            opacity: 0.8
+        });
+        const trail = new THREE.Mesh(trailGeometry, trailMaterial);
+        trail.position.z = -size;
+        bullet.add(trail);
+        
+        // Duman efekti
+        setInterval(() => {
+            if (bullet.parent) {
+                const smoke = new THREE.Mesh(
+                    new THREE.SphereGeometry(size * 0.3, 4, 4),
+                    new THREE.MeshBasicMaterial({ 
+                        color: 0x555555, 
+                        transparent: true, 
+                        opacity: 0.5 
+                    })
+                );
+                smoke.position.copy(bullet.position);
+                scene.add(smoke);
+                
+                setTimeout(() => scene.remove(smoke), 500);
+            }
+        }, 100);
+    }
     
     return bullet;
 }
 
-// Patlama efekti - DAHA GÜZELLEŞTİRİLDİ
-function createExplosion(position) {
-    const particleCount = 40; // Daha fazla partikül
+// Patlama efekti - Silah tipine göre
+function createExplosion(position, weaponType) {
+    let particleCount = 40;
+    let size = 0.25;
+    let lightIntensity = 8;
+    
+    if (weaponType === 'rocket') {
+        particleCount = 60;
+        size = 0.4;
+        lightIntensity = 12;
+    } else if (weaponType === 'missile') {
+        particleCount = 80;
+        size = 0.5;
+        lightIntensity = 15;
+    }
+    
     const particles = [];
     
     for (let i = 0; i < particleCount; i++) {
-        const geometry = new THREE.SphereGeometry(0.1 + Math.random() * 0.25, 4, 4);
+        const geometry = new THREE.SphereGeometry(0.1 + Math.random() * size, 4, 4);
         const material = new THREE.MeshBasicMaterial({ 
             color: Math.random() > 0.5 ? 0xff6600 : 0xffaa00
         });
@@ -512,9 +672,9 @@ function createExplosion(position) {
         
         particle.position.copy(position);
         particle.velocity = new THREE.Vector3(
-            (Math.random() - 0.5) * 0.4,
-            Math.random() * 0.5,
-            (Math.random() - 0.5) * 0.4
+            (Math.random() - 0.5) * 0.5,
+            Math.random() * 0.6,
+            (Math.random() - 0.5) * 0.5
         );
         particle.life = 1.0;
         
@@ -545,7 +705,7 @@ function createExplosion(position) {
     }
     
     // Işık efekti
-    const light = new THREE.PointLight(0xff6600, 8, 25);
+    const light = new THREE.PointLight(0xff6600, lightIntensity, 30);
     light.position.copy(position);
     scene.add(light);
     
@@ -568,7 +728,7 @@ function createExplosion(position) {
             }
         });
         
-        light.intensity = 8 * (1 - elapsed / 1.5);
+        light.intensity = lightIntensity * (1 - elapsed / 1.5);
         
         requestAnimationFrame(animate);
     };
@@ -629,6 +789,7 @@ socket.on('currentPlayers', (players) => {
     });
     updatePlayerCount();
     updateScoreboard();
+    updateWeaponDisplay();
 });
 
 socket.on('newPlayer', (playerData) => {
@@ -665,11 +826,43 @@ socket.on('playerDisconnected', (playerId) => {
 });
 
 socket.on('bulletFired', (bulletData) => {
-    const bullet = createBullet();
+    const bullet = createBullet(bulletData);
     bullet.position.set(bulletData.x, bulletData.y, bulletData.z);
     bullet.velocity = new THREE.Vector3(bulletData.velocityX, bulletData.velocityY, bulletData.velocityZ);
+    
+    // Füze ise rotasyonu ayarla
+    if (bulletData.type === 'missile') {
+        const angle = Math.atan2(bulletData.velocityX, bulletData.velocityZ);
+        bullet.rotation.x = Math.PI / 2;
+        bullet.rotation.z = -angle;
+    }
+    
     scene.add(bullet);
-    gameState.bullets[bulletData.id] = { mesh: bullet, data: bulletData };
+    gameState.bullets[bulletData.id] = { 
+        mesh: bullet, 
+        data: bulletData,
+        target: null // Füze için hedef
+    };
+    
+    // Füze ise en yakın düşmanı hedef al
+    if (bulletData.type === 'missile') {
+        let closestDist = Infinity;
+        let closestPlayer = null;
+        
+        Object.entries(gameState.players).forEach(([playerId, player]) => {
+            if (playerId !== bulletData.shooterId && player.tank) {
+                const dist = bullet.position.distanceTo(player.tank.position);
+                if (dist < closestDist && dist < 80) {
+                    closestDist = dist;
+                    closestPlayer = playerId;
+                }
+            }
+        });
+        
+        if (closestPlayer) {
+            gameState.bullets[bulletData.id].target = closestPlayer;
+        }
+    }
 });
 
 socket.on('bulletExpired', (bulletId) => {
@@ -750,7 +943,19 @@ function updateScoreboard() {
     }).join('');
 }
 
-function showKillNotification() {
+function updateWeaponDisplay() {
+    const weaponNames = {
+        normal: 'Normal 🔫',
+        rocket: 'Roket 🚀',
+        rapid: 'Hızlı Ateş ⚡',
+        missile: 'Takipçi Füze 🎯'
+    };
+    
+    document.getElementById('currentWeapon').textContent = weaponNames[gameState.currentWeapon];
+    document.getElementById('rocketAmmo').textContent = gameState.ammo.rocket;
+    document.getElementById('rapidAmmo').textContent = gameState.ammo.rapid;
+    document.getElementById('missileAmmo').textContent = gameState.ammo.missile;
+}
     const notification = document.getElementById('kill-notification');
     notification.textContent = '💀 KILL! +1';
     notification.style.display = 'block';
@@ -824,33 +1029,50 @@ function animate() {
             moved = true;
         }
         
-        // Çarpışma kontrolü - daha iyi algılama
+        // Çarpışma kontrolü - Tanklar ve duvarlar
         let collision = false;
-        const tankRadius = 2; // Tank yarıçapı
+        const tankRadius = 2.5; // Tank yarıçapı
         
-        obstacles.forEach(obstacle => {
-            if (!obstacle.geometry) return;
-            
-            const box = new THREE.Box3().setFromObject(obstacle);
-            
-            // Tank pozisyonunu genişlet (çarpışma kutusu)
-            const tankBox = new THREE.Box3(
-                new THREE.Vector3(
-                    gameState.myTank.position.x - tankRadius,
-                    gameState.myTank.position.y - 0.5,
-                    gameState.myTank.position.z - tankRadius
-                ),
-                new THREE.Vector3(
-                    gameState.myTank.position.x + tankRadius,
-                    gameState.myTank.position.y + 2.5,
-                    gameState.myTank.position.z + tankRadius
-                )
-            );
-            
-            if (box.intersectsBox(tankBox)) {
-                collision = true;
+        // Diğer tanklarla çarpışma
+        Object.entries(gameState.players).forEach(([playerId, player]) => {
+            if (playerId !== gameState.myId && player.tank) {
+                const distance = Math.sqrt(
+                    Math.pow(gameState.myTank.position.x - player.tank.position.x, 2) +
+                    Math.pow(gameState.myTank.position.z - player.tank.position.z, 2)
+                );
+                
+                if (distance < tankRadius * 2) { // İki tankın yarıçapı
+                    collision = true;
+                }
             }
         });
+        
+        // Engellerle çarpışma
+        if (!collision) {
+            obstacles.forEach(obstacle => {
+                if (!obstacle.geometry) return;
+                
+                const box = new THREE.Box3().setFromObject(obstacle);
+                
+                // Tank pozisyonunu genişlet (çarpışma kutusu)
+                const tankBox = new THREE.Box3(
+                    new THREE.Vector3(
+                        gameState.myTank.position.x - tankRadius,
+                        gameState.myTank.position.y - 0.5,
+                        gameState.myTank.position.z - tankRadius
+                    ),
+                    new THREE.Vector3(
+                        gameState.myTank.position.x + tankRadius,
+                        gameState.myTank.position.y + 2.5,
+                        gameState.myTank.position.z + tankRadius
+                    )
+                );
+                
+                if (box.intersectsBox(tankBox)) {
+                    collision = true;
+                }
+            });
+        }
         
         if (collision) {
             gameState.myTank.position.copy(oldPos);
@@ -860,11 +1082,15 @@ function animate() {
         gameState.myTank.position.x = Math.max(-95, Math.min(95, gameState.myTank.position.x));
         gameState.myTank.position.z = Math.max(-95, Math.min(95, gameState.myTank.position.z));
         
-        // Kamera - tankın arkasından
+        // Kamera - tankın arkasından + sağ tık ile serbestçe bak
         const camDist = 15;
         const camHeight = 8;
-        const camX = Math.sin(gameState.myTank.rotation.y) * camDist;
-        const camZ = Math.cos(gameState.myTank.rotation.y) * camDist;
+        
+        // Tank rotasyonu + fare ile eklenen açı
+        const totalCameraAngle = gameState.myTank.rotation.y + cameraAngleOffset;
+        
+        const camX = Math.sin(totalCameraAngle) * camDist;
+        const camZ = Math.cos(totalCameraAngle) * camDist;
         
         const targetCamPos = new THREE.Vector3(
             gameState.myTank.position.x - camX,
@@ -874,6 +1100,7 @@ function animate() {
         
         camera.position.lerp(targetCamPos, 0.15);
         
+        // Kamera tank pozisyonuna bakıyor
         const lookTarget = new THREE.Vector3(
             gameState.myTank.position.x,
             gameState.myTank.position.y + 2,
@@ -893,9 +1120,26 @@ function animate() {
         }
     }
     
-    // Mermileri güncelle
+    // Mermileri güncelle - Füze takibi ile
     Object.entries(gameState.bullets).forEach(([id, bullet]) => {
         if (!bullet || !bullet.mesh) return;
+        
+        // Füze takibi
+        if (bullet.data.type === 'missile' && bullet.target) {
+            const targetPlayer = gameState.players[bullet.target];
+            if (targetPlayer && targetPlayer.tank) {
+                // Hedefe doğru dön
+                const direction = new THREE.Vector3();
+                direction.subVectors(targetPlayer.tank.position, bullet.mesh.position).normalize();
+                
+                // Yumuşak dönüş
+                bullet.mesh.velocity.lerp(direction.multiplyScalar(1.2), 0.05);
+                
+                // Rotasyonu güncelle
+                const angle = Math.atan2(bullet.mesh.velocity.x, bullet.mesh.velocity.z);
+                bullet.mesh.rotation.z = -angle;
+            }
+        }
         
         bullet.mesh.position.add(bullet.mesh.velocity);
         
@@ -903,10 +1147,18 @@ function animate() {
         
         // Oyuncu çarpışması - DAHA İYİ ALGILAMA
         Object.entries(gameState.players).forEach(([playerId, player]) => {
-            if (bullet.data.playerId !== playerId && !hitSomething && player.tank) {
+            if (!player || !player.tank) return;
+            
+            // Kendi mermimiz başkalarına çarpmalı
+            if (bullet.data.playerId !== playerId && !hitSomething) {
                 const distance = bullet.mesh.position.distanceTo(player.tank.position);
-                if (distance < 3.5) { // Daha geniş çarpışma alanı
-                    createExplosion(bullet.mesh.position.clone());
+                
+                let hitRadius = 3;
+                if (bullet.data.type === 'rocket') hitRadius = 4;
+                if (bullet.data.type === 'missile') hitRadius = 5;
+                
+                if (distance < hitRadius) {
+                    createExplosion(bullet.mesh.position.clone(), bullet.data.type);
                     scene.remove(bullet.mesh);
                     delete gameState.bullets[id];
                     hitSomething = true;
@@ -914,10 +1166,11 @@ function animate() {
                     // Sunucuya hasar bildir
                     socket.emit('playerHit', {
                         hitPlayerId: playerId,
-                        shooterId: bullet.data.playerId
+                        shooterId: bullet.data.playerId,
+                        damage: bullet.data.damage || 25
                     });
                     
-                    console.log('HIT! Shooter:', bullet.data.playerId, 'Target:', playerId);
+                    console.log('🎯 HIT!', bullet.data.type, 'Hasar:', bullet.data.damage);
                 }
             }
         });
