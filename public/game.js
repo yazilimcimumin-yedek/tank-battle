@@ -330,8 +330,8 @@ function startGame() {
     document.getElementById('gameCanvas').style.display = 'block';
     document.getElementById('ui').style.display = 'block';
     
-    // Kamerayı başlat
-    camera.position.set(0, 15, 20);
+    // Kamerayı başlat - daha yüksek
+    camera.position.set(0, 20, 30);
     camera.lookAt(0, 0, 0);
     
     // Socket bağlantısı başlat
@@ -782,10 +782,10 @@ socket.on('currentPlayers', (players) => {
             // Kamerayı tankın arkasına ayarla
             camera.position.set(
                 tank.position.x,
-                tank.position.y + 10,
-                tank.position.z - 15
+                tank.position.y + 12,
+                tank.position.z - 18
             );
-            camera.lookAt(tank.position);
+            camera.lookAt(new THREE.Vector3(tank.position.x, tank.position.y + 2, tank.position.z));
             
             // İsmi sunucuya gönder
             socket.emit('setPlayerName', playerName);
